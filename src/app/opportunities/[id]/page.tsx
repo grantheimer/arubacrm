@@ -286,7 +286,7 @@ export default function OpportunityDetailPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
       <div className="mb-6">
         <Link href={`/accounts/${account.id}`} className="text-blue-600 hover:underline text-sm">
           &larr; Back to {account.name}
@@ -297,18 +297,18 @@ export default function OpportunityDetailPage() {
             {opportunity.product}
           </span>
         </div>
-        <div className="flex items-center gap-3 mt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mt-2">
           <p className="text-gray-500 text-sm">
             {contacts.length} contact{contacts.length !== 1 ? 's' : ''} for this opportunity
           </p>
-          <span className="text-gray-300 dark:text-gray-600">|</span>
+          <span className="hidden sm:inline text-gray-300 dark:text-gray-600">|</span>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">Status:</span>
             <select
               value={opportunity.status || 'prospect'}
               onChange={(e) => handleStatusChange(e.target.value as OpportunityStatus)}
               disabled={updatingStatus}
-              className={`text-sm px-2 py-1 rounded-lg border transition ${
+              className={`text-sm px-3 py-2 sm:px-2 sm:py-1 rounded-lg border transition ${
                 opportunity.status === 'prospect'
                   ? 'bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-700 dark:text-yellow-300'
                   : opportunity.status === 'active'
@@ -494,34 +494,36 @@ export default function OpportunityDetailPage() {
               </div>
 
               {/* Quick Log Buttons */}
-              <div className="flex gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   onClick={() => logContact(contact.id, 'email')}
                   disabled={loggingId === contact.id}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1.5"
+                  className="flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 active:bg-blue-800 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   <span>✉️</span> Email
                 </button>
                 <button
                   onClick={() => logContact(contact.id, 'call')}
                   disabled={loggingId === contact.id}
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1.5"
+                  className="flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 active:bg-green-800 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
                 >
                   <span>📞</span> Call
                 </button>
-                <div className="flex-1" />
-                <button
-                  onClick={() => handleEdit(contact)}
-                  className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(contact.id, contact.name)}
-                  className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-                >
-                  Delete
-                </button>
+                <div className="hidden sm:block flex-1" />
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => handleEdit(contact)}
+                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 transition"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(contact.id, contact.name)}
+                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 transition"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
 
               <input

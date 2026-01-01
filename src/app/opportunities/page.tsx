@@ -129,15 +129,15 @@ export default function OpportunitiesPage() {
   };
 
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-start mb-6">
+    <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold">Opportunities</h1>
           <p className="text-gray-500 text-sm">
             {opportunities.length} opportunit{opportunities.length !== 1 ? 'ies' : 'y'} total
           </p>
         </div>
-        <div className="flex gap-2 text-sm">
+        <div className="flex flex-wrap gap-2 text-sm">
           <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300">
             {prospectCount} Prospect
           </span>
@@ -151,17 +151,17 @@ export default function OpportunitiesPage() {
       </div>
 
       {/* Status Filter */}
-      <div className="mb-4 flex items-center gap-2">
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
         <span className="text-sm text-gray-500">Filter:</span>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {(['all', 'prospect', 'active', 'won'] as const).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
-              className={`px-3 py-1 text-sm rounded-lg transition ${
+              className={`px-3 py-2 sm:py-1 text-sm rounded-lg transition ${
                 statusFilter === status
                   ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
               }`}
             >
               {status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}

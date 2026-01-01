@@ -257,13 +257,13 @@ export default function TodoPage() {
   // Non-business day view
   if (!isBusinessDayToday) {
     return (
-      <div className="min-h-screen p-6 max-w-4xl mx-auto">
+      <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Daily To-Do</h1>
           <p className="text-gray-500 text-sm">Outreach activities for today</p>
         </div>
 
-        <div className="text-center py-16 bg-gray-50 dark:bg-gray-800 rounded-xl">
+        <div className="text-center py-12 sm:py-16 bg-gray-50 dark:bg-gray-800 rounded-xl">
           <div className="text-5xl mb-4">🏖️</div>
           <p className="text-xl font-medium text-gray-700 dark:text-gray-300">No Activities Due Today</p>
           <p className="text-gray-500 mt-2">It&apos;s the weekend! Enjoy your time off.</p>
@@ -292,13 +292,13 @@ export default function TodoPage() {
   // All activities completed view
   if (todayContacts.length === 0) {
     return (
-      <div className="min-h-screen p-6 max-w-4xl mx-auto">
+      <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Daily To-Do</h1>
           <p className="text-gray-500 text-sm">Outreach activities for today</p>
         </div>
 
-        <div className="text-center py-16 bg-green-50 dark:bg-green-900/20 rounded-xl">
+        <div className="text-center py-12 sm:py-16 bg-green-50 dark:bg-green-900/20 rounded-xl">
           <div className="text-5xl mb-4">🎉</div>
           <p className="text-xl font-medium text-green-700 dark:text-green-300">
             All of today&apos;s activities have been completed!
@@ -331,7 +331,7 @@ export default function TodoPage() {
   const dueToday = todayContacts.filter(c => !c.is_rollover).length;
 
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Daily To-Do</h1>
         <p className="text-gray-500 text-sm">Outreach activities for today</p>
@@ -359,20 +359,20 @@ export default function TodoPage() {
               contact.is_rollover ? 'border-red-300 dark:border-red-700' : ''
             }`}
           >
-            <div className="flex justify-between items-start mb-3">
-              <div>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-3">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-semibold">{contact.name}</h2>
-                  {contact.role && (
-                    <span className="text-gray-500 text-sm">- {contact.role}</span>
-                  )}
                   {contact.is_rollover && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300 font-medium">
                       Rollover ({contact.days_overdue}d overdue)
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                {contact.role && (
+                  <p className="text-sm text-gray-500 mt-0.5">{contact.role}</p>
+                )}
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="text-sm text-gray-600 dark:text-gray-400">
                     {contact.health_system.name}
                   </span>
@@ -382,7 +382,7 @@ export default function TodoPage() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
                   {contact.last_contact_date
-                    ? `Last contact: ${new Date(contact.last_contact_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} (${contact.days_since_contact}d ago)`
+                    ? `Last: ${new Date(contact.last_contact_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} (${contact.days_since_contact}d ago)`
                     : 'Never contacted'
                   }
                   {' · '}
@@ -391,9 +391,9 @@ export default function TodoPage() {
               </div>
               <Link
                 href={`/opportunities/${contact.opportunity.id}`}
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-blue-600 hover:underline shrink-0"
               >
-                View opportunity
+                View →
               </Link>
             </div>
 
@@ -401,14 +401,14 @@ export default function TodoPage() {
               <button
                 onClick={() => logOutreach(contact.id, 'email')}
                 disabled={loggingId === contact.id}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center gap-1.5"
+                className="flex-1 sm:flex-none px-4 py-3 sm:py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 active:bg-blue-800 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 <span>✉️</span> Email
               </button>
               <button
                 onClick={() => logOutreach(contact.id, 'call')}
                 disabled={loggingId === contact.id}
-                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-1.5"
+                className="flex-1 sm:flex-none px-4 py-3 sm:py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 active:bg-green-800 transition disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 <span>📞</span> Call
               </button>

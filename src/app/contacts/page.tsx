@@ -91,7 +91,7 @@ export default function ContactsPage() {
   });
 
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Contacts</h1>

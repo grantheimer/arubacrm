@@ -246,17 +246,17 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen p-6 max-w-5xl mx-auto">
+    <div className="min-h-screen p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-gray-500 text-sm">Your outreach activity at a glance</p>
       </div>
 
       {/* Top Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <Link href="/todo" className="bg-white dark:bg-gray-800 rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+        <Link href="/todo" className="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 border shadow-sm hover:shadow-md active:shadow-sm transition-shadow">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Due Today</p>
-          <p className={`text-3xl font-bold mt-1 ${
+          <p className={`text-2xl sm:text-3xl font-bold mt-1 ${
             stats.contactsDueToday === 0 ? 'text-green-600' : 'text-blue-600'
           }`}>
             {stats.contactsDueToday}
@@ -269,22 +269,22 @@ export default function DashboardPage() {
           </p>
         </Link>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 border shadow-sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">This Week</p>
-          <p className="text-3xl font-bold mt-1">{stats.outreachThisWeek}</p>
+          <p className="text-2xl sm:text-3xl font-bold mt-1">{stats.outreachThisWeek}</p>
           <p className="text-xs text-gray-400">total outreach</p>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 border shadow-sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Streak</p>
-          <p className="text-3xl font-bold mt-1">{stats.currentStreak}</p>
+          <p className="text-2xl sm:text-3xl font-bold mt-1">{stats.currentStreak}</p>
           <p className="text-xs text-gray-400">{stats.currentStreak === 1 ? 'day' : 'days'} in a row</p>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border shadow-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-3 sm:p-4 border shadow-sm">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Prospects</p>
-          <p className="text-3xl font-bold mt-1">{stats.prospectOpportunities}</p>
-          <p className="text-xs text-gray-400">active opportunities</p>
+          <p className="text-2xl sm:text-3xl font-bold mt-1">{stats.prospectOpportunities}</p>
+          <p className="text-xs text-gray-400">active opps</p>
         </div>
       </div>
 

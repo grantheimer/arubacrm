@@ -129,7 +129,7 @@ export default function AccountDetailPage() {
   const availableProducts = PRODUCTS.filter((p) => !existingProducts.has(p));
 
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
       <div className="mb-6">
         <Link href="/accounts" className="text-blue-600 hover:underline text-sm">
           &larr; Back to Accounts

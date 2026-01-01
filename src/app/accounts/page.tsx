@@ -153,7 +153,7 @@ export default function AccountsPage() {
   }
 
   return (
-    <div className="min-h-screen p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen p-4 sm:p-6 max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Accounts</h1>
@@ -239,8 +239,8 @@ export default function AccountsPage() {
               key={system.id}
               className="border rounded-xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
             >
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-lg">{system.name}</h3>
                   <p className="text-sm text-gray-500 mt-0.5">
                     {system.opportunity_count} opportunit{system.opportunity_count !== 1 ? 'ies' : 'y'}
@@ -260,22 +260,22 @@ export default function AccountsPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-2 sm:gap-1">
                   <Link
                     href={`/accounts/${system.id}`}
-                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    className="flex-1 sm:flex-none text-center px-3 py-2 sm:py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition"
                   >
                     Manage
                   </Link>
                   <button
                     onClick={() => handleEdit(system)}
-                    className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 active:bg-gray-200 transition"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDelete(system.id, system.name)}
-                    className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                    className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 transition"
                   >
                     Delete
                   </button>
