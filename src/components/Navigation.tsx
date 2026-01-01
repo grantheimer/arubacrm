@@ -7,6 +7,7 @@ import Logo from './Logo';
 const navItems = [
   { href: '/todo', label: 'To-Do' },
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/opportunities', label: 'Opportunities' },
   { href: '/accounts', label: 'Accounts' },
   { href: '/contacts', label: 'Contacts' },
 ];
