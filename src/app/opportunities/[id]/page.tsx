@@ -527,15 +527,16 @@ export default function OpportunityDetailPage() {
             return (
               <div
                 key={contact.id}
-                className="border rounded-xl p-4 bg-white dark:bg-gray-800 shadow-sm"
+                className="border border-gray-700 rounded-xl p-4 sm:p-3 bg-gray-800 shadow-sm"
               >
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <button
                       onClick={() => openHistory(contact.id, contact.name)}
-                      className="font-semibold text-blue-600 hover:text-blue-700 hover:underline text-left"
+                      className="font-semibold text-base sm:text-lg text-white hover:underline text-left inline-flex items-center gap-1.5"
                     >
                       {contact.name}
+                      <span className="text-gray-400 text-sm">↗</span>
                     </button>
                     {contact.role && (
                       <p className="text-sm text-gray-600 dark:text-gray-400">{contact.role}</p>
@@ -572,23 +573,23 @@ export default function OpportunityDetailPage() {
                 <div className="flex flex-wrap gap-2 mb-3">
                   <button
                     onClick={() => toggleSelection(contact.id, 'emailed')}
-                    className={`flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                       selection.emailed
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
                     }`}
                   >
-                    <span>{selection.emailed ? '✓' : '○'}</span> Emailed
+                    {selection.emailed && <span>✓</span>} Emailed
                   </button>
                   <button
                     onClick={() => toggleSelection(contact.id, 'called')}
-                    className={`flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                       selection.called
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-orange-500 text-white hover:bg-orange-600'
                     }`}
                   >
-                    <span>{selection.called ? '✓' : '○'}</span> Called
+                    {selection.called && <span>✓</span>} Called
                   </button>
                   <div className="hidden sm:block flex-1" />
                   <div className="flex gap-2 w-full sm:w-auto">
@@ -613,17 +614,17 @@ export default function OpportunityDetailPage() {
                   placeholder="Notes (optional)"
                   value={selection.notes}
                   onChange={(e) => updateNotes(contact.id, e.target.value)}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 mb-3"
+                  className="w-full px-3 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400 mb-3"
                 />
 
                 {/* Submit Button */}
                 <button
                   onClick={() => handleLogSubmit(contact.id)}
                   disabled={submittingId === contact.id || !hasSelection}
-                  className={`w-full py-3 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2 ${
+                  className={`w-full py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-2 ${
                     hasSelection
                       ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
+                      : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   } disabled:opacity-50`}
                 >
                   {submittingId === contact.id ? (

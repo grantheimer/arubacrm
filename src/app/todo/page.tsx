@@ -418,18 +418,19 @@ export default function TodoPage() {
           return (
             <div
               key={contact.id}
-              className={`border rounded-xl p-4 bg-white dark:bg-gray-800 shadow-sm ${
-                contact.is_rollover ? 'border-red-300 dark:border-red-700' : ''
+              className={`border rounded-xl p-4 sm:p-3 bg-gray-800 dark:bg-gray-800 shadow-sm ${
+                contact.is_rollover ? 'border-red-400' : 'border-gray-700'
               }`}
             >
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-4">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-3 sm:mb-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => openHistory(contact.id, contact.name)}
-                      className="font-semibold text-blue-600 hover:text-blue-700 hover:underline text-left"
+                      className="font-semibold text-base sm:text-lg text-white hover:underline text-left inline-flex items-center gap-1.5"
                     >
                       {contact.name}
+                      <span className="text-gray-400 text-sm">↗</span>
                     </button>
                     {contact.is_rollover && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300 font-medium">
@@ -438,17 +439,17 @@ export default function TodoPage() {
                     )}
                   </div>
                   {contact.role && (
-                    <p className="text-sm text-gray-500 mt-0.5">{contact.role}</p>
+                    <p className="text-sm sm:text-base text-gray-400 mt-0.5">{contact.role}</p>
                   )}
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="text-sm sm:text-base text-gray-300 dark:text-gray-300">
                       {contact.health_system.name}
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                    <span className="text-xs sm:text-sm px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
                       {contact.opportunity.product}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs sm:text-sm text-gray-500 mt-1">
                     {contact.last_contact_date
                       ? `Last: ${new Date(contact.last_contact_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} (${contact.days_since_contact}d ago)`
                       : 'Never contacted'
@@ -459,7 +460,7 @@ export default function TodoPage() {
                 </div>
                 <Link
                   href={`/opportunities/${contact.opportunity.id}`}
-                  className="text-xs text-blue-600 hover:underline shrink-0"
+                  className="text-xs sm:text-sm text-blue-400 hover:underline shrink-0"
                 >
                   View →
                 </Link>
@@ -469,23 +470,23 @@ export default function TodoPage() {
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={() => toggleSelection(contact.id, 'emailed')}
-                  className={`flex-1 sm:flex-none px-4 py-3 sm:py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 sm:flex-none px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                     selection.emailed
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
                   }`}
                 >
-                  <span>{selection.emailed ? '✓' : '○'}</span> Emailed
+                  {selection.emailed && <span>✓</span>} Emailed
                 </button>
                 <button
                   onClick={() => toggleSelection(contact.id, 'called')}
-                  className={`flex-1 sm:flex-none px-4 py-3 sm:py-2 text-sm font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 sm:flex-none px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                     selection.called
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-orange-500 text-white hover:bg-orange-600'
                   }`}
                 >
-                  <span>{selection.called ? '✓' : '○'}</span> Called
+                  {selection.called && <span>✓</span>} Called
                 </button>
               </div>
 
@@ -495,17 +496,17 @@ export default function TodoPage() {
                 placeholder="Notes (optional)"
                 value={selection.notes}
                 onChange={(e) => updateNotes(contact.id, e.target.value)}
-                className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 mb-3"
+                className="w-full px-3 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400 mb-3"
               />
 
               {/* Submit Button */}
               <button
                 onClick={() => handleSubmit(contact.id)}
                 disabled={submittingId === contact.id || !hasSelection}
-                className={`w-full py-3 text-sm font-medium rounded-lg transition flex items-center justify-center gap-2 ${
+                className={`w-full py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-2 ${
                   hasSelection
                     ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 } disabled:opacity-50`}
               >
                 {submittingId === contact.id ? (
