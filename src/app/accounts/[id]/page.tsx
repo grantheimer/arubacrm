@@ -2,25 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase, HealthSystem, Contact, PRODUCTS } from '@/lib/supabase';
+import { supabase, HealthSystem, Opportunity, Contact, PRODUCTS } from '@/lib/supabase';
 import Link from 'next/link';
 
-type ContactFormData = {
-  name: string;
-  role: string;
-  email: string;
-  phone: string;
-  notes: string;
-  products: string[];
-};
-
-const emptyContactForm: ContactFormData = {
-  name: '',
-  role: '',
-  email: '',
-  phone: '',
-  notes: '',
-  products: [],
+type OpportunityWithContacts = Opportunity & {
+  contacts: Contact[];
 };
 
 export default function AccountDetailPage() {
@@ -28,12 +14,9 @@ export default function AccountDetailPage() {
   const accountId = params.id as string;
 
   const [account, setAccount] = useState<HealthSystem | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [opportunities, setOpportunities] = useState<OpportunityWithContacts[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<ContactFormData>(emptyContactForm);
-  const [saving, setSaving] = useState(false);
+  const [addingProduct, setAddingProduct] = useState<string | null>(null);
 
   const fetchData = async () => {
     const { data: accountData, error: accountError } = await supabase
@@ -50,18 +33,33 @@ export default function AccountDetailPage() {
 
     setAccount(accountData);
 
-    const { data: contactsData, error: contactsError } = await supabase
-      .from('contacts')
+    const { data: oppsData } = await supabase
+      .from('opportunities')
       .select('*')
       .eq('health_system_id', accountId)
-      .order('name');
+      .order('product');
 
-    if (contactsError) {
-      console.error('Error fetching contacts:', contactsError);
-    } else {
-      setContacts(contactsData || []);
-    }
+    const { data: contactsData } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('health_system_id', accountId);
 
+    const contactsByOpp: Record<string, Contact[]> = {};
+    (contactsData || []).forEach((contact: Contact) => {
+      if (contact.opportunity_id) {
+        if (!contactsByOpp[contact.opportunity_id]) {
+          contactsByOpp[contact.opportunity_id] = [];
+        }
+        contactsByOpp[contact.opportunity_id].push(contact);
+      }
+    });
+
+    const oppsWithContacts = (oppsData || []).map((opp: Opportunity) => ({
+      ...opp,
+      contacts: contactsByOpp[opp.id] || [],
+    }));
+
+    setOpportunities(oppsWithContacts);
     setLoading(false);
   };
 
@@ -71,93 +69,39 @@ export default function AccountDetailPage() {
     }
   }, [accountId]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
+  const handleAddOpportunity = async (product: string) => {
+    setAddingProduct(product);
 
-    if (editingId) {
-      const { error } = await supabase
-        .from('contacts')
-        .update({
-          name: formData.name,
-          role: formData.role || null,
-          email: formData.email || null,
-          phone: formData.phone || null,
-          notes: formData.notes || null,
-          products: formData.products,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingId);
-
-      if (error) {
-        console.error('Error updating contact:', error);
-        alert('Failed to update contact');
-      }
-    } else {
-      const { error } = await supabase.from('contacts').insert({
-        name: formData.name,
-        role: formData.role || null,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        notes: formData.notes || null,
-        products: formData.products,
-        health_system_id: accountId,
-      });
-
-      if (error) {
-        console.error('Error creating contact:', error);
-        alert('Failed to create contact');
-      }
-    }
-
-    setSaving(false);
-    setShowForm(false);
-    setEditingId(null);
-    setFormData(emptyContactForm);
-    await fetchData();
-  };
-
-  const handleEdit = (contact: Contact) => {
-    setFormData({
-      name: contact.name,
-      role: contact.role || '',
-      email: contact.email || '',
-      phone: contact.phone || '',
-      notes: contact.notes || '',
-      products: contact.products || [],
+    const { error } = await supabase.from('opportunities').insert({
+      health_system_id: accountId,
+      product,
     });
-    setEditingId(contact.id);
-    setShowForm(true);
-  };
-
-  const toggleProduct = (product: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      products: prev.products.includes(product)
-        ? prev.products.filter((p) => p !== product)
-        : [...prev.products, product],
-    }));
-  };
-
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This removes their outreach history.`)) {
-      return;
-    }
-
-    const { error } = await supabase.from('contacts').delete().eq('id', id);
 
     if (error) {
-      console.error('Error deleting contact:', error);
-      alert('Failed to delete contact');
+      console.error('Error adding opportunity:', error);
+      alert('Failed to add opportunity');
     } else {
       await fetchData();
     }
+
+    setAddingProduct(null);
   };
 
-  const handleCancel = () => {
-    setShowForm(false);
-    setEditingId(null);
-    setFormData(emptyContactForm);
+  const handleRemoveOpportunity = async (oppId: string, product: string, contactCount: number) => {
+    if (contactCount > 0) {
+      if (!confirm(`Remove "${product}"? This will also remove ${contactCount} contact${contactCount !== 1 ? 's' : ''} assigned to it.`)) {
+        return;
+      }
+    }
+
+    const { error } = await supabase.from('opportunities').delete().eq('id', oppId);
+
+    if (error) {
+      console.error('Error removing opportunity:', error);
+      alert('Failed to remove opportunity');
+    } else {
+      await fetchData();
+    }
   };
 
   if (loading) {
@@ -181,201 +125,99 @@ export default function AccountDetailPage() {
     );
   }
 
+  const existingProducts = new Set(opportunities.map((o) => o.product));
+  const availableProducts = PRODUCTS.filter((p) => !existingProducts.has(p));
+
   return (
     <div className="min-h-screen p-6 max-w-4xl mx-auto">
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <Link href="/accounts" className="text-blue-600 hover:underline text-sm">
-            &larr; Back to Accounts
-          </Link>
-          <h1 className="text-2xl font-bold mt-1">{account.name}</h1>
-          {account.major_opportunities > 0 && (
-            <p className="text-gray-500 text-sm">
-              {account.major_opportunities} major opportunit{account.major_opportunities !== 1 ? 'ies' : 'y'}
-            </p>
-          )}
-        </div>
-        {!showForm && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
-          >
-            + Add Contact
-          </button>
-        )}
+      <div className="mb-6">
+        <Link href="/accounts" className="text-blue-600 hover:underline text-sm">
+          &larr; Back to Accounts
+        </Link>
+        <h1 className="text-2xl font-bold mt-1">{account.name}</h1>
+        <p className="text-gray-500 text-sm">
+          {opportunities.length} opportunit{opportunities.length !== 1 ? 'ies' : 'y'}
+        </p>
       </div>
 
-      {showForm && (
-        <div className="mb-6 p-5 border rounded-xl bg-white dark:bg-gray-800 shadow-sm">
-          <h2 className="text-lg font-semibold mb-4">
-            {editingId ? 'Edit Contact' : 'New Contact'}
-          </h2>
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                  placeholder="e.g., John Smith"
-                />
-              </div>
+      {/* Add Opportunities */}
+      <div className="mb-6 p-5 border rounded-xl bg-white dark:bg-gray-800 shadow-sm">
+        <h2 className="text-lg font-semibold mb-3">Solutions You Can Sell</h2>
+        <p className="text-sm text-gray-500 mb-4">Click to add a solution as an opportunity for this account</p>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Role / Title</label>
-                <input
-                  type="text"
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                  placeholder="e.g., VP of Operations"
-                />
-              </div>
+        <div className="flex flex-wrap gap-2">
+          {PRODUCTS.map((product) => {
+            const isAdded = existingProducts.has(product);
+            const isLoading = addingProduct === product;
 
-              <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                  placeholder="e.g., john@mayoclinic.org"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Phone</label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                  placeholder="e.g., (555) 123-4567"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">
-                  Products <span className="text-red-500">*</span>
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {PRODUCTS.map((product) => (
-                    <button
-                      key={product}
-                      type="button"
-                      onClick={() => toggleProduct(product)}
-                      className={`px-3 py-1.5 text-sm rounded-lg border transition ${
-                        formData.products.includes(product)
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      {product}
-                    </button>
-                  ))}
-                </div>
-                {formData.products.length === 0 && (
-                  <p className="text-xs text-gray-500 mt-1">Select at least one product</p>
-                )}
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Notes</label>
-                <input
-                  type="text"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                  placeholder="Any notes about this contact..."
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-4">
+            return (
               <button
-                type="submit"
-                disabled={saving || formData.products.length === 0}
-                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                key={product}
+                onClick={() => !isAdded && handleAddOpportunity(product)}
+                disabled={isAdded || isLoading}
+                className={`px-3 py-1.5 text-sm rounded-lg border transition ${
+                  isAdded
+                    ? 'bg-blue-600 text-white border-blue-600 cursor-default'
+                    : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                } ${isLoading ? 'opacity-50' : ''}`}
               >
-                {saving ? 'Saving...' : editingId ? 'Update' : 'Add Contact'}
+                {isAdded ? '✓ ' : '+ '}{product}
               </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-4 py-2 border text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+            );
+          })}
         </div>
-      )}
+      </div>
 
-      {contacts.length === 0 && !showForm ? (
-        <div className="text-center py-16 bg-gray-50 dark:bg-gray-800 rounded-xl">
-          <p className="text-gray-500 mb-2">No contacts at this account yet</p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="text-blue-600 hover:underline text-sm"
-          >
-            Add your first contact
-          </button>
+      {/* Opportunities List */}
+      {opportunities.length === 0 ? (
+        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-xl">
+          <p className="text-gray-500 mb-2">No opportunities yet</p>
+          <p className="text-sm text-gray-400">Add solutions above to create opportunities</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          <p className="text-gray-500 text-sm mb-3">
-            {contacts.length} contact{contacts.length !== 1 ? 's' : ''}
-          </p>
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">Opportunities</h2>
 
-          {contacts.map((contact) => (
+          {opportunities.map((opp) => (
             <div
-              key={contact.id}
+              key={opp.id}
               className="border rounded-xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <h3 className="font-semibold">{contact.name}</h3>
-                  {contact.role && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{contact.role}</p>
-                  )}
-                  {(contact.email || contact.phone) && (
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {contact.email}{contact.email && contact.phone && ' · '}{contact.phone}
-                    </p>
-                  )}
-                  {contact.products && contact.products.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {contact.products.map((product) => (
-                        <span
-                          key={product}
-                          className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                        >
-                          {product}
-                        </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-medium">
+                      {opp.product}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {opp.contacts.length} contact{opp.contacts.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  {opp.contacts.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {opp.contacts.map((contact) => (
+                        <p key={contact.id} className="text-sm text-gray-600 dark:text-gray-400">
+                          {contact.name}
+                          {contact.role && <span className="text-gray-400"> - {contact.role}</span>}
+                        </p>
                       ))}
                     </div>
                   )}
-                  {contact.notes && (
-                    <p className="text-xs text-gray-400 mt-1 italic">{contact.notes}</p>
-                  )}
                 </div>
+
                 <div className="flex gap-1">
-                  <button
-                    onClick={() => handleEdit(contact)}
-                    className="px-3 py-1.5 text-xs border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                  <Link
+                    href={`/opportunities/${opp.id}`}
+                    className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                   >
-                    Edit
-                  </button>
+                    {opp.contacts.length === 0 ? 'Add Contacts' : 'Manage'}
+                  </Link>
                   <button
-                    onClick={() => handleDelete(contact.id, contact.name)}
+                    onClick={() => handleRemoveOpportunity(opp.id, opp.product, opp.contacts.length)}
                     className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition"
                   >
-                    Delete
+                    Remove
                   </button>
                 </div>
               </div>

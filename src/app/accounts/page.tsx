@@ -1,28 +1,27 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, HealthSystem, PRODUCTS } from '@/lib/supabase';
+import { supabase, HealthSystem, Opportunity } from '@/lib/supabase';
 import Link from 'next/link';
 
-type HealthSystemWithCount = HealthSystem & {
+type HealthSystemWithCounts = HealthSystem & {
+  opportunity_count: number;
   contact_count: number;
-  products: string[];
+  opportunities: Opportunity[];
 };
 
 type FormData = {
   name: string;
-  major_opportunities: number;
   notes: string;
 };
 
 const emptyForm: FormData = {
   name: '',
-  major_opportunities: 0,
   notes: '',
 };
 
 export default function AccountsPage() {
-  const [healthSystems, setHealthSystems] = useState<HealthSystemWithCount[]>([]);
+  const [healthSystems, setHealthSystems] = useState<HealthSystemWithCounts[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -41,25 +40,33 @@ export default function AccountsPage() {
       return;
     }
 
+    const { data: opportunities } = await supabase
+      .from('opportunities')
+      .select('*');
+
     const { data: contacts } = await supabase
       .from('contacts')
-      .select('health_system_id, products');
+      .select('health_system_id');
 
+    const oppsBySystem: Record<string, Opportunity[]> = {};
     const contactCounts: Record<string, number> = {};
-    const accountProducts: Record<string, Set<string>> = {};
 
-    (contacts || []).forEach((c: { health_system_id: string; products: string[] }) => {
-      contactCounts[c.health_system_id] = (contactCounts[c.health_system_id] || 0) + 1;
-      if (!accountProducts[c.health_system_id]) {
-        accountProducts[c.health_system_id] = new Set();
+    (opportunities || []).forEach((opp: Opportunity) => {
+      if (!oppsBySystem[opp.health_system_id]) {
+        oppsBySystem[opp.health_system_id] = [];
       }
-      (c.products || []).forEach((p) => accountProducts[c.health_system_id].add(p));
+      oppsBySystem[opp.health_system_id].push(opp);
+    });
+
+    (contacts || []).forEach((c: { health_system_id: string }) => {
+      contactCounts[c.health_system_id] = (contactCounts[c.health_system_id] || 0) + 1;
     });
 
     const systemsWithCounts = (systems || []).map((system) => ({
       ...system,
+      opportunities: oppsBySystem[system.id] || [],
+      opportunity_count: (oppsBySystem[system.id] || []).length,
       contact_count: contactCounts[system.id] || 0,
-      products: Array.from(accountProducts[system.id] || []).sort(),
     }));
 
     setHealthSystems(systemsWithCounts);
@@ -78,7 +85,8 @@ export default function AccountsPage() {
       const { error } = await supabase
         .from('health_systems')
         .update({
-          ...formData,
+          name: formData.name,
+          notes: formData.notes || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', editingId);
@@ -88,7 +96,10 @@ export default function AccountsPage() {
         alert('Failed to update');
       }
     } else {
-      const { error } = await supabase.from('health_systems').insert(formData);
+      const { error } = await supabase.from('health_systems').insert({
+        name: formData.name,
+        notes: formData.notes || null,
+      });
 
       if (error) {
         console.error('Error creating:', error);
@@ -106,7 +117,6 @@ export default function AccountsPage() {
   const handleEdit = (system: HealthSystem) => {
     setFormData({
       name: system.name,
-      major_opportunities: system.major_opportunities || 0,
       notes: system.notes || '',
     });
     setEditingId(system.id);
@@ -114,7 +124,7 @@ export default function AccountsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This removes all contacts and outreach history.`)) {
+    if (!confirm(`Delete "${name}"? This removes all opportunities, contacts, and outreach history.`)) {
       return;
     }
 
@@ -154,7 +164,7 @@ export default function AccountsPage() {
             onClick={() => setShowForm(true)}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
           >
-            + Add New
+            + Add Account
           </button>
         )}
       </div>
@@ -165,7 +175,7 @@ export default function AccountsPage() {
             {editingId ? 'Edit Account' : 'New Account'}
           </h2>
           <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Health System Name <span className="text-red-500">*</span>
@@ -181,21 +191,6 @@ export default function AccountsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Major Opportunities <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={formData.major_opportunities}
-                  onChange={(e) => setFormData({ ...formData, major_opportunities: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                  placeholder="0"
-                />
-              </div>
-
-              <div className="md:col-span-2">
                 <label className="block text-sm font-medium mb-1">Notes</label>
                 <textarea
                   value={formData.notes}
@@ -246,25 +241,20 @@ export default function AccountsPage() {
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-semibold">{system.name}</h3>
-                    {system.major_opportunities > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                        {system.major_opportunities} opp{system.major_opportunities !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                  </div>
+                  <h3 className="font-semibold text-lg">{system.name}</h3>
                   <p className="text-sm text-gray-500 mt-0.5">
+                    {system.opportunity_count} opportunit{system.opportunity_count !== 1 ? 'ies' : 'y'}
+                    {' · '}
                     {system.contact_count} contact{system.contact_count !== 1 ? 's' : ''}
                   </p>
-                  {system.products.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {system.products.map((product) => (
+                  {system.opportunities.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {system.opportunities.map((opp) => (
                         <span
-                          key={product}
-                          className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
+                          key={opp.id}
+                          className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
                         >
-                          {product}
+                          {opp.product}
                         </span>
                       ))}
                     </div>
@@ -275,7 +265,7 @@ export default function AccountsPage() {
                     href={`/accounts/${system.id}`}
                     className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                   >
-                    Contacts
+                    Manage
                   </Link>
                   <button
                     onClick={() => handleEdit(system)}

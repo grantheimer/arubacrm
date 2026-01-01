@@ -22,7 +22,15 @@ export type Product = typeof PRODUCTS[number];
 export type HealthSystem = {
   id: string;
   name: string;
-  major_opportunities: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Opportunity = {
+  id: string;
+  health_system_id: string;
+  product: string;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -31,11 +39,11 @@ export type HealthSystem = {
 export type Contact = {
   id: string;
   health_system_id: string;
+  opportunity_id: string | null;
   name: string;
   role: string | null;
   email: string | null;
   phone: string | null;
-  products: string[];
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -50,15 +58,14 @@ export type OutreachLog = {
   created_at: string;
 };
 
-export type ContactWithDetails = Contact & {
+export type OpportunityWithDetails = Opportunity & {
   health_system: HealthSystem;
-  last_contact_date: string | null;
-  last_contact_method: string | null;
-  days_since_contact: number | null;
-  days_since_account_contact: number | null;
+  contacts: Contact[];
+  last_email_date: string | null;
+  days_since_email: number | null;
+  emails_this_week: number;
 };
 
-export type HealthSystemWithContacts = HealthSystem & {
-  contacts: Contact[];
-  last_contact_date: string | null;
+export type HealthSystemWithOpportunities = HealthSystem & {
+  opportunities: Opportunity[];
 };
