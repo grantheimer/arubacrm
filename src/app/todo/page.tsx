@@ -511,21 +511,42 @@ export default function TodoPage() {
 
               {/* LLM prompt for drafting outreach email */}
               <div className="mt-1 mb-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setOpenPromptIds((prev) => ({
-                      ...prev,
-                      [contact.id]: !isPromptOpen,
-                    }))
-                  }
-                  className="text-xs text-blue-300 hover:text-blue-200 hover:underline"
-                >
-                  {isPromptOpen ? 'Hide LLM Prompt' : 'Show LLM Prompt'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(prompt);
+                        setCopiedContactId(contact.id);
+                        setTimeout(() => setCopiedContactId(null), 1500);
+                      } catch (err) {
+                        console.error('Failed to copy LLM prompt', err);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-gray-700 text-white hover:bg-gray-600"
+                  >
+                    <span>📋</span>
+                    <span>Copy LLM Prompt</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenPromptIds((prev) => ({
+                        ...prev,
+                        [contact.id]: !isPromptOpen,
+                      }))
+                    }
+                    className="text-xs text-blue-300 hover:text-blue-200 hover:underline"
+                  >
+                    {isPromptOpen ? 'Hide LLM Prompt' : 'Show LLM Prompt'}
+                  </button>
+                  {copiedContactId === contact.id && (
+                    <span className="text-xs text-green-400">Copied!</span>
+                  )}
+                </div>
 
                 {isPromptOpen && (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-2">
                     <textarea
                       value={prompt}
                       onChange={(e) =>
@@ -537,25 +558,6 @@ export default function TodoPage() {
                       rows={8}
                       className="w-full text-xs sm:text-sm leading-snug border border-gray-600 rounded-lg bg-gray-900 text-gray-100 p-2 font-mono"
                     />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(prompt);
-                          setCopiedContactId(contact.id);
-                          setTimeout(() => setCopiedContactId(null), 1500);
-                        } catch (err) {
-                          console.error('Failed to copy LLM prompt', err);
-                        }
-                      }}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md bg-gray-700 text-white hover:bg-gray-600"
-                    >
-                      <span>📋</span>
-                      <span>Copy LLM Prompt</span>
-                    </button>
-                    {copiedContactId === contact.id && (
-                      <span className="ml-2 text-xs text-green-400">Copied!</span>
-                    )}
                   </div>
                 )}
               </div>
