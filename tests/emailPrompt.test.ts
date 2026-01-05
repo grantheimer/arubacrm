@@ -33,9 +33,9 @@ describe('buildLlmPromptForContact', () => {
     expect(prompt).toContain(contact.notes!);
 
     // Formatting footer
-    expect(prompt).toContain('First, generate a concise, professional subject line.');
+    expect(prompt).toContain('First, generate a concise, professional subject line that does not exceed 50 characters.');
     expect(prompt).toContain('Then generate the email body.');
-    expect(prompt.trim().endsWith('<email body here>')).toBe(true);
+    expect(prompt.trim().endsWith('Thank you.')).toBe(true);
     expect(prompt).toMatch(/Subject: <subject line>/);
   });
 
@@ -71,16 +71,16 @@ describe('buildLlmPromptForContact', () => {
   });
 
   it('truncates internalNotes to 500 characters', () => {
-    const longNotes = 'X'.repeat(600);
+    // Use distinguishable patterns with unique markers
+    const longNotes = 'X'.repeat(500) + 'TRUNCATED_MARKER';
     const contact = makeContact({ notes: longNotes });
 
     const prompt = buildLlmPromptForContact(contact);
 
-    const expected = longNotes.slice(0, 500);
-    const notExpected = longNotes.slice(500);
-
-    expect(prompt).toContain(expected);
-    expect(prompt).not.toContain(notExpected);
+    // Should contain 500 X's
+    expect(prompt).toContain('X'.repeat(500));
+    // Should NOT contain the marker (it was truncated)
+    expect(prompt).not.toContain('TRUNCATED_MARKER');
   });
 });
 
