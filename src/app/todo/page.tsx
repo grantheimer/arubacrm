@@ -96,6 +96,7 @@ export default function TodoPage() {
   const [promptEdits, setPromptEdits] = useState<Record<string, string>>({});
   const [openPromptIds, setOpenPromptIds] = useState<Record<string, boolean>>({});
   const [copiedContactId, setCopiedContactId] = useState<string | null>(null);
+  const [copiedEmailId, setCopiedEmailId] = useState<string | null>(null);
   
   // History modal state
   const [historyContactId, setHistoryContactId] = useState<string | null>(null);
@@ -494,6 +495,8 @@ export default function TodoPage() {
                       onClick={async () => {
                         try {
                           await navigator.clipboard.writeText(contact.email!);
+                          setCopiedEmailId(contact.id);
+                          setTimeout(() => setCopiedEmailId(null), 1500);
                         } catch (err) {
                           console.error('Failed to copy email', err);
                         }
@@ -505,6 +508,9 @@ export default function TodoPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
                     </button>
+                    {copiedEmailId === contact.id && (
+                      <span className="text-xs text-green-400">Copied!</span>
+                    )}
                   </>
                 ) : (
                   <span className="text-sm text-gray-500 italic">No email</span>
