@@ -185,7 +185,7 @@ export default function TodoPage() {
         // Calculate due date based on last contact + cadence from junction table
         const lastContactDate = new Date(last.date);
         lastContactDate.setHours(0, 0, 0, 0);
-        daysSinceContact = Math.floor((today.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60 * 24));
+        daysSinceContact = countBusinessDays(lastContactDate, today);
 
         // Due date is last contact date + cadence_days (in business days)
         dueDate = addBusinessDays(lastContactDate, assignment.cadence_days);
