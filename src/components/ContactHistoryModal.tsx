@@ -6,6 +6,7 @@ import { supabase, OutreachLog } from '@/lib/supabase';
 type ContactHistoryModalProps = {
   contactId: string;
   contactName: string;
+  opportunityId?: string; // Optional: filter logs to specific opportunity
   onClose: () => void;
   onDelete?: () => void;
 };
@@ -13,6 +14,7 @@ type ContactHistoryModalProps = {
 export default function ContactHistoryModal({
   contactId,
   contactName,
+  opportunityId,
   onClose,
   onDelete,
 }: ContactHistoryModalProps) {
@@ -21,11 +23,17 @@ export default function ContactHistoryModal({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchLogs = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('outreach_logs')
       .select('*')
-      .eq('contact_id', contactId)
-      .order('contact_date', { ascending: false });
+      .eq('contact_id', contactId);
+
+    // If opportunityId is provided, filter to that opportunity's logs
+    if (opportunityId) {
+      query = query.eq('opportunity_id', opportunityId);
+    }
+
+    const { data, error } = await query.order('contact_date', { ascending: false });
 
     if (error) {
       console.error('Error fetching logs:', error);
@@ -37,7 +45,7 @@ export default function ContactHistoryModal({
 
   useEffect(() => {
     fetchLogs();
-  }, [contactId]);
+  }, [contactId, opportunityId]);
 
   // Prevent body scroll when modal is open
   useEffect(() => {
@@ -112,7 +120,9 @@ export default function ContactHistoryModal({
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
           <div>
             <h2 className="text-lg font-semibold">{contactName}</h2>
-            <p className="text-sm text-gray-500">Outreach History</p>
+            <p className="text-sm text-gray-500">
+              {opportunityId ? 'Outreach History (this opportunity)' : 'Outreach History (all opportunities)'}
+            </p>
           </div>
           <button
             onClick={onClose}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase, HealthSystem, Opportunity, Contact, PRODUCTS } from '@/lib/supabase';
+import { supabase, HealthSystem, Opportunity, Contact, ContactOpportunity, PRODUCTS } from '@/lib/supabase';
 import Link from 'next/link';
 
 type OpportunityWithContacts = Opportunity & {
@@ -44,13 +44,26 @@ export default function AccountDetailPage() {
       .select('*')
       .eq('health_system_id', accountId);
 
-    const contactsByOpp: Record<string, Contact[]> = {};
+    // Get contact-opportunity assignments
+    const { data: assignmentsData } = await supabase
+      .from('contact_opportunities')
+      .select('*');
+
+    // Build contact lookup map
+    const contactMap: Record<string, Contact> = {};
     (contactsData || []).forEach((contact: Contact) => {
-      if (contact.opportunity_id) {
-        if (!contactsByOpp[contact.opportunity_id]) {
-          contactsByOpp[contact.opportunity_id] = [];
+      contactMap[contact.id] = contact;
+    });
+
+    // Build contacts by opportunity using junction table
+    const contactsByOpp: Record<string, Contact[]> = {};
+    (assignmentsData || []).forEach((assignment: ContactOpportunity) => {
+      const contact = contactMap[assignment.contact_id];
+      if (contact) {
+        if (!contactsByOpp[assignment.opportunity_id]) {
+          contactsByOpp[assignment.opportunity_id] = [];
         }
-        contactsByOpp[contact.opportunity_id].push(contact);
+        contactsByOpp[assignment.opportunity_id].push(contact);
       }
     });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, Opportunity, HealthSystem, Contact, OutreachLog, OpportunityStatus } from '@/lib/supabase';
+import { supabase, Opportunity, HealthSystem, ContactOpportunity, OutreachLog, OpportunityStatus } from '@/lib/supabase';
 import Link from 'next/link';
 
 type OpportunityWithDetails = Opportunity & {
@@ -21,9 +21,9 @@ export default function OpportunitiesPage() {
       .from('opportunities')
       .select('*, health_systems(*)');
 
-    // Get contacts
-    const { data: contactsData } = await supabase
-      .from('contacts')
+    // Get contact-opportunity assignments
+    const { data: assignmentsData } = await supabase
+      .from('contact_opportunities')
       .select('*');
 
     // Get outreach logs
@@ -32,24 +32,17 @@ export default function OpportunitiesPage() {
       .select('*')
       .order('contact_date', { ascending: false });
 
-    // Build contact to opportunity map
-    const contactToOpp: Record<string, string> = {};
+    // Build contact count by opportunity from junction table
     const contactCountByOpp: Record<string, number> = {};
-
-    (contactsData || []).forEach((c: Contact) => {
-      if (c.opportunity_id) {
-        contactToOpp[c.id] = c.opportunity_id;
-        contactCountByOpp[c.opportunity_id] = (contactCountByOpp[c.opportunity_id] || 0) + 1;
-      }
+    (assignmentsData || []).forEach((a: ContactOpportunity) => {
+      contactCountByOpp[a.opportunity_id] = (contactCountByOpp[a.opportunity_id] || 0) + 1;
     });
 
-    // Find last outreach date per opportunity
+    // Find last outreach date per opportunity (outreach_logs now has opportunity_id directly)
     const lastOutreachByOpp: Record<string, string> = {};
-
     (logsData || []).forEach((log: OutreachLog) => {
-      const oppId = contactToOpp[log.contact_id];
-      if (oppId && !lastOutreachByOpp[oppId]) {
-        lastOutreachByOpp[oppId] = log.contact_date;
+      if (log.opportunity_id && !lastOutreachByOpp[log.opportunity_id]) {
+        lastOutreachByOpp[log.opportunity_id] = log.contact_date;
       }
     });
 

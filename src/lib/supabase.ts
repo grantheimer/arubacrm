@@ -48,20 +48,27 @@ export type Opportunity = {
 export type Contact = {
   id: string;
   health_system_id: string;
-  opportunity_id: string | null;
   name: string;
   role: string | null;
   email: string | null;
   phone: string | null;
   notes: string | null;
-  cadence_days: number;
   created_at: string;
   updated_at: string;
+};
+
+export type ContactOpportunity = {
+  id: string;
+  contact_id: string;
+  opportunity_id: string;
+  cadence_days: number;
+  created_at: string;
 };
 
 export type OutreachLog = {
   id: string;
   contact_id: string;
+  opportunity_id: string | null;
   contact_date: string;
   contact_method: 'call' | 'email';
   notes: string | null;

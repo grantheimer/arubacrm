@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, Contact, HealthSystem, Opportunity, OutreachLog } from '@/lib/supabase';
+import { supabase, Contact, HealthSystem, Opportunity, OutreachLog, ContactOpportunity } from '@/lib/supabase';
 import Link from 'next/link';
 import ContactHistoryModal from '@/components/ContactHistoryModal';
 import { buildLlmPromptForContact } from '@/lib/emailPrompt';
@@ -9,6 +9,8 @@ import { buildLlmPromptForContact } from '@/lib/emailPrompt';
 type ContactWithDueInfo = Contact & {
   health_system: HealthSystem;
   opportunity: Opportunity;
+  assignment_id: string; // contact_opportunities.id - unique key for this contact-opportunity pair
+  cadence_days: number; // from junction table
   last_contact_date: string | null;
   days_since_contact: number | null;
   days_overdue: number;
@@ -105,16 +107,16 @@ export default function TodoPage() {
   const fetchData = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     // Check if today is a business day
     const isBizDay = isBusinessDay(today);
     setIsBusinessDayToday(isBizDay);
-    
+
     // Calculate next business day
     const nextBizDay = getNextBusinessDay(today);
     setNextBusinessDay(nextBizDay);
 
-    // Get all opportunities with health systems
+    // Get all prospect opportunities with health systems
     const { data: allOppsData } = await supabase
       .from('opportunities')
       .select('*, health_systems(*)');
@@ -124,9 +126,8 @@ export default function TodoPage() {
       (o: Opportunity) => !o.status || o.status === 'prospect'
     );
 
-    // Get contacts for prospect opportunities
     const prospectOppIds = (oppsData || []).map((o: Opportunity) => o.id);
-    
+
     if (prospectOppIds.length === 0) {
       setTodayContacts([]);
       setNextDayContacts([]);
@@ -134,28 +135,32 @@ export default function TodoPage() {
       return;
     }
 
-    const { data: contactsData } = await supabase
-      .from('contacts')
-      .select('*')
+    // Get contact-opportunity assignments for prospect opportunities
+    const { data: assignmentsData } = await supabase
+      .from('contact_opportunities')
+      .select('*, contacts(*)')
       .in('opportunity_id', prospectOppIds);
 
-    // Get all outreach logs
+    // Get outreach logs for these opportunities (filtered by opportunity_id)
     const { data: logsData } = await supabase
       .from('outreach_logs')
       .select('*')
+      .in('opportunity_id', prospectOppIds)
       .order('contact_date', { ascending: false });
 
-    // Build maps
+    // Build opportunity map
     const oppsMap: Record<string, Opportunity & { health_systems: HealthSystem }> = {};
     (oppsData || []).forEach((opp: Opportunity & { health_systems: HealthSystem }) => {
       oppsMap[opp.id] = opp;
     });
 
-    // Find last outreach for each contact (any type counts)
+    // Find last outreach for each contact-opportunity pair
+    // Key is `${contact_id}-${opportunity_id}`
     const lastOutreach: Record<string, { date: string; method: string }> = {};
     (logsData || []).forEach((log: OutreachLog) => {
-      if (!lastOutreach[log.contact_id]) {
-        lastOutreach[log.contact_id] = {
+      const key = `${log.contact_id}-${log.opportunity_id}`;
+      if (!lastOutreach[key]) {
+        lastOutreach[key] = {
           date: log.contact_date,
           method: log.contact_method,
         };
@@ -163,26 +168,29 @@ export default function TodoPage() {
     });
 
     // Calculate due dates and build contact list
+    // Each assignment is a separate to-do item
     const allDueContacts: ContactWithDueInfo[] = [];
 
-    (contactsData || []).forEach((contact: Contact) => {
-      const opp = oppsMap[contact.opportunity_id || ''];
-      if (!opp) return;
+    (assignmentsData || []).forEach((assignment: ContactOpportunity & { contacts: Contact }) => {
+      const contact = assignment.contacts;
+      const opp = oppsMap[assignment.opportunity_id];
+      if (!opp || !contact) return;
 
-      const last = lastOutreach[contact.id];
+      const key = `${contact.id}-${assignment.opportunity_id}`;
+      const last = lastOutreach[key];
       let dueDate: Date;
       let daysSinceContact: number | null = null;
 
       if (last) {
-        // Calculate due date based on last contact + cadence
+        // Calculate due date based on last contact + cadence from junction table
         const lastContactDate = new Date(last.date);
         lastContactDate.setHours(0, 0, 0, 0);
         daysSinceContact = Math.floor((today.getTime() - lastContactDate.getTime()) / (1000 * 60 * 60 * 24));
-        
+
         // Due date is last contact date + cadence_days (in business days)
-        dueDate = addBusinessDays(lastContactDate, contact.cadence_days || 10);
+        dueDate = addBusinessDays(lastContactDate, assignment.cadence_days);
       } else {
-        // Never contacted - due today (or first business day if weekend)
+        // Never contacted for this opportunity - due today (or first business day if weekend)
         dueDate = isBizDay ? today : nextBizDay;
       }
 
@@ -194,6 +202,8 @@ export default function TodoPage() {
         ...contact,
         health_system: opp.health_systems,
         opportunity: opp,
+        assignment_id: assignment.id,
+        cadence_days: assignment.cadence_days,
         last_contact_date: last?.date || null,
         days_since_contact: daysSinceContact,
         days_overdue: daysOverdue,
@@ -235,51 +245,54 @@ export default function TodoPage() {
     fetchData();
   }, []);
 
-  const toggleSelection = (contactId: string, field: 'emailed' | 'called') => {
+  const toggleSelection = (assignmentId: string, field: 'emailed' | 'called') => {
     setSelections(prev => ({
       ...prev,
-      [contactId]: {
-        emailed: prev[contactId]?.emailed || false,
-        called: prev[contactId]?.called || false,
-        notes: prev[contactId]?.notes || '',
-        [field]: !prev[contactId]?.[field],
+      [assignmentId]: {
+        emailed: prev[assignmentId]?.emailed || false,
+        called: prev[assignmentId]?.called || false,
+        notes: prev[assignmentId]?.notes || '',
+        [field]: !prev[assignmentId]?.[field],
       },
     }));
   };
 
-  const updateNotes = (contactId: string, notes: string) => {
+  const updateNotes = (assignmentId: string, notes: string) => {
     setSelections(prev => ({
       ...prev,
-      [contactId]: {
-        emailed: prev[contactId]?.emailed || false,
-        called: prev[contactId]?.called || false,
+      [assignmentId]: {
+        emailed: prev[assignmentId]?.emailed || false,
+        called: prev[assignmentId]?.called || false,
         notes,
       },
     }));
   };
 
-  const handleSubmit = async (contactId: string) => {
-    const selection = selections[contactId];
+  const handleSubmit = async (contact: ContactWithDueInfo) => {
+    const key = contact.assignment_id; // Use assignment_id as key for selections
+    const selection = selections[key];
     if (!selection?.emailed && !selection?.called) {
       alert('Please select at least one action (Emailed or Called)');
       return;
     }
 
-    setSubmittingId(contactId);
+    setSubmittingId(key);
 
-    const logs: { contact_id: string; contact_method: string; notes: string | null }[] = [];
-    
+    const logs: { contact_id: string; opportunity_id: string; contact_method: string; notes: string | null }[] = [];
+
     if (selection.emailed) {
       logs.push({
-        contact_id: contactId,
+        contact_id: contact.id,
+        opportunity_id: contact.opportunity.id,
         contact_method: 'email',
         notes: selection.notes || null,
       });
     }
-    
+
     if (selection.called) {
       logs.push({
-        contact_id: contactId,
+        contact_id: contact.id,
+        opportunity_id: contact.opportunity.id,
         contact_method: 'call',
         notes: selection.notes || null,
       });
@@ -294,12 +307,12 @@ export default function TodoPage() {
       // Clear selection and refresh
       setSelections(prev => {
         const newSelections = { ...prev };
-        delete newSelections[contactId];
+        delete newSelections[key];
         return newSelections;
       });
       await fetchData();
     }
-    
+
     setSubmittingId(null);
   };
 
@@ -419,16 +432,17 @@ export default function TodoPage() {
 
       <div className="space-y-3">
         {todayContacts.map((contact) => {
-          const selection = selections[contact.id] || { emailed: false, called: false, notes: '' };
+          const assignmentId = contact.assignment_id;
+          const selection = selections[assignmentId] || { emailed: false, called: false, notes: '' };
           const hasSelection = selection.emailed || selection.called;
 
           const defaultPrompt = buildLlmPromptForContact(contact);
-          const prompt = promptEdits[contact.id] ?? defaultPrompt;
-          const isPromptOpen = openPromptIds[contact.id] ?? false;
+          const prompt = promptEdits[assignmentId] ?? defaultPrompt;
+          const isPromptOpen = openPromptIds[assignmentId] ?? false;
 
           return (
             <div
-              key={contact.id}
+              key={assignmentId}
               className={`border rounded-xl p-4 sm:p-3 bg-gray-800 dark:bg-gray-800 shadow-sm ${
                 contact.is_rollover ? 'border-red-400' : 'border-gray-700'
               }`}
@@ -481,7 +495,7 @@ export default function TodoPage() {
                 type="text"
                 placeholder="Notes (optional)"
                 value={selection.notes}
-                onChange={(e) => updateNotes(contact.id, e.target.value)}
+                onChange={(e) => updateNotes(assignmentId, e.target.value)}
                 className="w-full px-3 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400 mb-3"
               />
 
@@ -525,7 +539,7 @@ export default function TodoPage() {
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(prompt);
-                        setCopiedContactId(contact.id);
+                        setCopiedContactId(assignmentId);
                         setTimeout(() => setCopiedContactId(null), 1500);
                       } catch (err) {
                         console.error('Failed to copy LLM prompt', err);
@@ -541,14 +555,14 @@ export default function TodoPage() {
                     onClick={() =>
                       setOpenPromptIds((prev) => ({
                         ...prev,
-                        [contact.id]: !isPromptOpen,
+                        [assignmentId]: !isPromptOpen,
                       }))
                     }
                     className="text-xs text-blue-300 hover:text-blue-200 hover:underline"
                   >
                     {isPromptOpen ? 'Hide LLM Prompt' : 'Show LLM Prompt'}
                   </button>
-                  {copiedContactId === contact.id && (
+                  {copiedContactId === assignmentId && (
                     <span className="text-xs text-green-400">Copied!</span>
                   )}
                 </div>
@@ -560,7 +574,7 @@ export default function TodoPage() {
                       onChange={(e) =>
                         setPromptEdits((prev) => ({
                           ...prev,
-                          [contact.id]: e.target.value,
+                          [assignmentId]: e.target.value,
                         }))
                       }
                       rows={8}
@@ -573,7 +587,7 @@ export default function TodoPage() {
               {/* Toggle Buttons */}
               <div className="flex gap-2 mb-3">
                 <button
-                  onClick={() => toggleSelection(contact.id, 'emailed')}
+                  onClick={() => toggleSelection(assignmentId, 'emailed')}
                   className={`flex-1 sm:flex-none px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                     selection.emailed
                       ? 'bg-green-600 text-white'
@@ -583,7 +597,7 @@ export default function TodoPage() {
                   {selection.emailed && <span>✓</span>} Emailed
                 </button>
                 <button
-                  onClick={() => toggleSelection(contact.id, 'called')}
+                  onClick={() => toggleSelection(assignmentId, 'called')}
                   className={`flex-1 sm:flex-none px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                     selection.called
                       ? 'bg-green-600 text-white'
@@ -596,15 +610,15 @@ export default function TodoPage() {
 
               {/* Submit Button */}
               <button
-                onClick={() => handleSubmit(contact.id)}
-                disabled={submittingId === contact.id || !hasSelection}
+                onClick={() => handleSubmit(contact)}
+                disabled={submittingId === assignmentId || !hasSelection}
                 className={`w-full py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-2 ${
                   hasSelection
                     ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
                     : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 } disabled:opacity-50`}
               >
-                {submittingId === contact.id ? (
+                {submittingId === assignmentId ? (
                   'Saving...'
                 ) : (
                   <>

@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, Contact, HealthSystem, Opportunity } from '@/lib/supabase';
+import { supabase, Contact, HealthSystem, Opportunity, ContactOpportunity } from '@/lib/supabase';
 import Link from 'next/link';
 
 type ContactWithDetails = Contact & {
   health_system: HealthSystem;
-  opportunity: Opportunity | null;
+  opportunities: Opportunity[]; // Can have multiple opportunities
 };
 
 export default function ContactsPage() {
@@ -42,6 +42,11 @@ export default function ContactsPage() {
       .from('opportunities')
       .select('*');
 
+    // Get all contact-opportunity assignments
+    const { data: assignmentsData } = await supabase
+      .from('contact_opportunities')
+      .select('*');
+
     const accountsMap: Record<string, HealthSystem> = {};
     (accountsData || []).forEach((a: HealthSystem) => {
       accountsMap[a.id] = a;
@@ -52,10 +57,22 @@ export default function ContactsPage() {
       oppsMap[o.id] = o;
     });
 
+    // Build a map of contact_id -> opportunities[]
+    const contactOppsMap: Record<string, Opportunity[]> = {};
+    (assignmentsData || []).forEach((assignment: ContactOpportunity) => {
+      const opp = oppsMap[assignment.opportunity_id];
+      if (opp) {
+        if (!contactOppsMap[assignment.contact_id]) {
+          contactOppsMap[assignment.contact_id] = [];
+        }
+        contactOppsMap[assignment.contact_id].push(opp);
+      }
+    });
+
     const enrichedContacts: ContactWithDetails[] = (contactsData || []).map((contact: Contact) => ({
       ...contact,
       health_system: accountsMap[contact.health_system_id],
-      opportunity: contact.opportunity_id ? oppsMap[contact.opportunity_id] : null,
+      opportunities: contactOppsMap[contact.id] || [],
     }));
 
     setContacts(enrichedContacts);
@@ -135,11 +152,21 @@ export default function ContactsPage() {
                     >
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h3 className="font-medium">{contact.name}</h3>
-                            {contact.opportunity && (
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                                {contact.opportunity.product}
+                            {contact.opportunities.length > 0 ? (
+                              contact.opportunities.map((opp) => (
+                                <Link
+                                  key={opp.id}
+                                  href={`/opportunities/${opp.id}`}
+                                  className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 transition"
+                                >
+                                  {opp.product}
+                                </Link>
+                              ))
+                            ) : (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300">
+                                No opportunities
                               </span>
                             )}
                           </div>
@@ -151,21 +178,8 @@ export default function ContactsPage() {
                               {contact.email}{contact.email && contact.phone && ' · '}{contact.phone}
                             </p>
                           )}
-                          {!contact.opportunity_id && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300">
-                              No opportunity
-                            </span>
-                          )}
                         </div>
                         <div className="flex gap-1">
-                          {contact.opportunity_id && (
-                            <Link
-                              href={`/opportunities/${contact.opportunity_id}`}
-                              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                            >
-                              View
-                            </Link>
-                          )}
                           <button
                             onClick={() => handleDelete(contact.id, contact.name)}
                             className="px-3 py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition"

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase, HealthSystem, Opportunity, Contact, OutreachLog, OPPORTUNITY_STATUSES, OpportunityStatus } from '@/lib/supabase';
+import { supabase, HealthSystem, Opportunity, Contact, OutreachLog, ContactOpportunity, OPPORTUNITY_STATUSES, OpportunityStatus } from '@/lib/supabase';
 import Link from 'next/link';
 import ContactHistoryModal from '@/components/ContactHistoryModal';
 
@@ -25,6 +25,8 @@ const emptyContactForm: ContactFormData = {
 };
 
 type ContactWithOutreach = Contact & {
+  assignment_id: string; // contact_opportunities.id
+  cadence_days: number; // from junction table
   last_contact_date: string | null;
   last_contact_method: string | null;
   days_since_contact: number | null;
@@ -43,8 +45,10 @@ export default function OpportunityDetailPage() {
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [account, setAccount] = useState<HealthSystem | null>(null);
   const [contacts, setContacts] = useState<ContactWithOutreach[]>([]);
+  const [unassignedContacts, setUnassignedContacts] = useState<Contact[]>([]); // Account contacts not on this opportunity
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showAssignPicker, setShowAssignPicker] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ContactFormData>(emptyContactForm);
   const [saving, setSaving] = useState(false);
@@ -81,17 +85,20 @@ export default function OpportunityDetailPage() {
 
     setAccount(accountData);
 
-    const { data: contactsData } = await supabase
-      .from('contacts')
-      .select('*')
-      .eq('opportunity_id', opportunityId)
-      .order('name');
+    // Get contact assignments for this opportunity via junction table
+    const { data: assignmentsData } = await supabase
+      .from('contact_opportunities')
+      .select('*, contacts(*)')
+      .eq('opportunity_id', opportunityId);
 
+    // Get outreach logs for this opportunity
     const { data: logsData } = await supabase
       .from('outreach_logs')
       .select('*')
+      .eq('opportunity_id', opportunityId)
       .order('contact_date', { ascending: false });
 
+    // Find last outreach for each contact on this opportunity
     const lastOutreach: Record<string, { date: string; method: string }> = {};
     (logsData || []).forEach((log: OutreachLog) => {
       if (!lastOutreach[log.contact_id]) {
@@ -102,21 +109,43 @@ export default function OpportunityDetailPage() {
       }
     });
 
-    const enrichedContacts: ContactWithOutreach[] = (contactsData || []).map((contact: Contact) => {
-      const last = lastOutreach[contact.id];
-      const daysSince = last
-        ? Math.floor((Date.now() - new Date(last.date).getTime()) / (1000 * 60 * 60 * 24))
-        : null;
+    // Build enriched contacts from assignments
+    const enrichedContacts: ContactWithOutreach[] = (assignmentsData || [])
+      .filter((a: ContactOpportunity & { contacts: Contact }) => a.contacts)
+      .map((assignment: ContactOpportunity & { contacts: Contact }) => {
+        const contact = assignment.contacts;
+        const last = lastOutreach[contact.id];
+        const daysSince = last
+          ? Math.floor((Date.now() - new Date(last.date).getTime()) / (1000 * 60 * 60 * 24))
+          : null;
 
-      return {
-        ...contact,
-        last_contact_date: last?.date || null,
-        last_contact_method: last?.method || null,
-        days_since_contact: daysSince,
-      };
-    });
+        return {
+          ...contact,
+          assignment_id: assignment.id,
+          cadence_days: assignment.cadence_days,
+          last_contact_date: last?.date || null,
+          last_contact_method: last?.method || null,
+          days_since_contact: daysSince,
+        };
+      })
+      .sort((a: ContactWithOutreach, b: ContactWithOutreach) => a.name.localeCompare(b.name));
 
     setContacts(enrichedContacts);
+
+    // Get all contacts for this account to find unassigned ones
+    const { data: allAccountContacts } = await supabase
+      .from('contacts')
+      .select('*')
+      .eq('health_system_id', oppData.health_system_id)
+      .order('name');
+
+    // Filter to contacts not assigned to this opportunity
+    const assignedContactIds = new Set(enrichedContacts.map((c: ContactWithOutreach) => c.id));
+    const unassigned = (allAccountContacts || []).filter(
+      (c: Contact) => !assignedContactIds.has(c.id)
+    );
+    setUnassignedContacts(unassigned);
+
     setLoading(false);
   };
 
@@ -131,61 +160,69 @@ export default function OpportunityDetailPage() {
     setSaving(true);
 
     if (editingId) {
-      let error;
-      const updateData: Record<string, unknown> = {
-        name: formData.name,
-        role: formData.role || null,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        notes: formData.notes || null,
-        updated_at: new Date().toISOString(),
-      };
+      // Editing existing contact - update contact details and junction cadence separately
+      const contact = contacts.find(c => c.id === editingId);
 
-      const resultWithCadence = await supabase
+      // Update contact basic info
+      const { error: contactError } = await supabase
         .from('contacts')
-        .update({ ...updateData, cadence_days: formData.cadence_days })
+        .update({
+          name: formData.name,
+          role: formData.role || null,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          notes: formData.notes || null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', editingId);
 
-      if (resultWithCadence.error) {
-        const resultWithoutCadence = await supabase
-          .from('contacts')
-          .update(updateData)
-          .eq('id', editingId);
-        error = resultWithoutCadence.error;
-        
-        if (!error) {
-          console.warn('Note: cadence_days column may not exist. Run migration v4 to enable cadence editing.');
+      if (contactError) {
+        console.error('Error updating contact:', contactError);
+        alert('Failed to update contact: ' + contactError.message);
+      }
+
+      // Update cadence in junction table
+      if (contact?.assignment_id) {
+        const { error: cadenceError } = await supabase
+          .from('contact_opportunities')
+          .update({ cadence_days: formData.cadence_days })
+          .eq('id', contact.assignment_id);
+
+        if (cadenceError) {
+          console.error('Error updating cadence:', cadenceError);
         }
       }
-
-      if (error) {
-        console.error('Error updating contact:', error);
-        alert('Failed to update contact: ' + error.message);
-      }
     } else {
-      const insertData: Record<string, unknown> = {
-        name: formData.name,
-        role: formData.role || null,
-        email: formData.email || null,
-        phone: formData.phone || null,
-        notes: formData.notes || null,
-        opportunity_id: opportunityId,
-        health_system_id: opportunity?.health_system_id,
-      };
+      // Creating new contact - insert contact, then create junction row
+      const { data: newContact, error: insertError } = await supabase
+        .from('contacts')
+        .insert({
+          name: formData.name,
+          role: formData.role || null,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          notes: formData.notes || null,
+          health_system_id: opportunity?.health_system_id,
+        })
+        .select()
+        .single();
 
-      const resultWithCadence = await supabase.from('contacts').insert({
-        ...insertData,
-        cadence_days: formData.cadence_days,
-      });
+      if (insertError) {
+        console.error('Error creating contact:', insertError);
+        alert('Failed to create contact: ' + insertError.message);
+      } else if (newContact) {
+        // Create assignment in junction table
+        const { error: assignError } = await supabase
+          .from('contact_opportunities')
+          .insert({
+            contact_id: newContact.id,
+            opportunity_id: opportunityId,
+            cadence_days: formData.cadence_days,
+          });
 
-      if (resultWithCadence.error) {
-        const resultWithoutCadence = await supabase.from('contacts').insert(insertData);
-        
-        if (resultWithoutCadence.error) {
-          console.error('Error creating contact:', resultWithoutCadence.error);
-          alert('Failed to create contact: ' + resultWithoutCadence.error.message);
-        } else {
-          console.warn('Note: cadence_days column may not exist. Run migration v4 to enable cadence editing.');
+        if (assignError) {
+          console.error('Error assigning contact:', assignError);
+          alert('Contact created but failed to assign to opportunity');
         }
       }
     }
@@ -197,21 +234,41 @@ export default function OpportunityDetailPage() {
     await fetchData();
   };
 
-  const handleEdit = (contact: Contact) => {
+  const handleEdit = (contact: ContactWithOutreach) => {
     setFormData({
       name: contact.name,
       role: contact.role || '',
       email: contact.email || '',
       phone: contact.phone || '',
       notes: contact.notes || '',
-      cadence_days: contact.cadence_days || 10,
+      cadence_days: contact.cadence_days,
     });
     setEditingId(contact.id);
     setShowForm(true);
   };
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Delete "${name}"? This removes their outreach history.`)) {
+  // Remove contact from this opportunity (keeps contact at account level)
+  const handleRemoveFromOpportunity = async (contact: ContactWithOutreach) => {
+    if (!confirm(`Remove "${contact.name}" from this opportunity? The contact will remain at the account level.`)) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('contact_opportunities')
+      .delete()
+      .eq('id', contact.assignment_id);
+
+    if (error) {
+      console.error('Error removing contact from opportunity:', error);
+      alert('Failed to remove contact');
+    } else {
+      await fetchData();
+    }
+  };
+
+  // Permanently delete contact (and all their assignments/history)
+  const handleDeleteContact = async (id: string, name: string) => {
+    if (!confirm(`Permanently delete "${name}"? This removes them from ALL opportunities and deletes their outreach history.`)) {
       return;
     }
 
@@ -221,6 +278,25 @@ export default function OpportunityDetailPage() {
       console.error('Error deleting contact:', error);
       alert('Failed to delete contact');
     } else {
+      await fetchData();
+    }
+  };
+
+  // Assign an existing account contact to this opportunity
+  const handleAssignContact = async (contactId: string, cadenceDays: number = 10) => {
+    const { error } = await supabase
+      .from('contact_opportunities')
+      .insert({
+        contact_id: contactId,
+        opportunity_id: opportunityId,
+        cadence_days: cadenceDays,
+      });
+
+    if (error) {
+      console.error('Error assigning contact:', error);
+      alert('Failed to assign contact to opportunity');
+    } else {
+      setShowAssignPicker(false);
       await fetchData();
     }
   };
@@ -252,52 +328,55 @@ export default function OpportunityDetailPage() {
     setUpdatingStatus(false);
   };
 
-  // Outreach logging functions
-  const toggleSelection = (contactId: string, field: 'emailed' | 'called') => {
+  // Outreach logging functions - use assignment_id as key
+  const toggleSelection = (assignmentId: string, field: 'emailed' | 'called') => {
     setSelections(prev => ({
       ...prev,
-      [contactId]: {
-        emailed: prev[contactId]?.emailed || false,
-        called: prev[contactId]?.called || false,
-        notes: prev[contactId]?.notes || '',
-        [field]: !prev[contactId]?.[field],
+      [assignmentId]: {
+        emailed: prev[assignmentId]?.emailed || false,
+        called: prev[assignmentId]?.called || false,
+        notes: prev[assignmentId]?.notes || '',
+        [field]: !prev[assignmentId]?.[field],
       },
     }));
   };
 
-  const updateNotes = (contactId: string, notes: string) => {
+  const updateNotes = (assignmentId: string, notes: string) => {
     setSelections(prev => ({
       ...prev,
-      [contactId]: {
-        emailed: prev[contactId]?.emailed || false,
-        called: prev[contactId]?.called || false,
+      [assignmentId]: {
+        emailed: prev[assignmentId]?.emailed || false,
+        called: prev[assignmentId]?.called || false,
         notes,
       },
     }));
   };
 
-  const handleLogSubmit = async (contactId: string) => {
-    const selection = selections[contactId];
+  const handleLogSubmit = async (contact: ContactWithOutreach) => {
+    const key = contact.assignment_id;
+    const selection = selections[key];
     if (!selection?.emailed && !selection?.called) {
       alert('Please select at least one action (Emailed or Called)');
       return;
     }
 
-    setSubmittingId(contactId);
+    setSubmittingId(key);
 
-    const logs: { contact_id: string; contact_method: string; notes: string | null }[] = [];
-    
+    const logs: { contact_id: string; opportunity_id: string; contact_method: string; notes: string | null }[] = [];
+
     if (selection.emailed) {
       logs.push({
-        contact_id: contactId,
+        contact_id: contact.id,
+        opportunity_id: opportunityId,
         contact_method: 'email',
         notes: selection.notes || null,
       });
     }
-    
+
     if (selection.called) {
       logs.push({
-        contact_id: contactId,
+        contact_id: contact.id,
+        opportunity_id: opportunityId,
         contact_method: 'call',
         notes: selection.notes || null,
       });
@@ -311,12 +390,12 @@ export default function OpportunityDetailPage() {
     } else {
       setSelections(prev => {
         const newSelections = { ...prev };
-        delete newSelections[contactId];
+        delete newSelections[key];
         return newSelections;
       });
       await fetchData();
     }
-    
+
     setSubmittingId(null);
   };
 
@@ -397,14 +476,59 @@ export default function OpportunityDetailPage() {
         )}
       </div>
 
-      {/* Add Contact Button */}
-      {!showForm && (
-        <button
-          onClick={() => setShowForm(true)}
-          className="mb-6 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
-        >
-          + Add Contact
-        </button>
+      {/* Add/Assign Contact Buttons */}
+      {!showForm && !showAssignPicker && (
+        <div className="mb-6 flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
+          >
+            + New Contact
+          </button>
+          {unassignedContacts.length > 0 && (
+            <button
+              onClick={() => setShowAssignPicker(true)}
+              className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition"
+            >
+              Assign Existing ({unassignedContacts.length})
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Assign Existing Contact Picker */}
+      {showAssignPicker && (
+        <div className="mb-6 p-5 border rounded-xl bg-white dark:bg-gray-800 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Assign Existing Contact</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Select a contact from this account to assign to this opportunity.
+          </p>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {unassignedContacts.map((contact) => (
+              <div
+                key={contact.id}
+                className="flex items-center justify-between p-3 border rounded-lg bg-gray-50 dark:bg-gray-700"
+              >
+                <div>
+                  <p className="font-medium">{contact.name}</p>
+                  {contact.role && <p className="text-sm text-gray-500">{contact.role}</p>}
+                </div>
+                <button
+                  onClick={() => handleAssignContact(contact.id)}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition"
+                >
+                  Assign
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowAssignPicker(false)}
+            className="mt-4 px-4 py-2 border text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+          >
+            Cancel
+          </button>
+        </div>
       )}
 
       {/* Contact Form */}
@@ -508,7 +632,7 @@ export default function OpportunityDetailPage() {
       )}
 
       {/* Contacts List */}
-      {contacts.length === 0 && !showForm ? (
+      {contacts.length === 0 && !showForm && !showAssignPicker ? (
         <div className="text-center py-16 bg-gray-50 dark:bg-gray-800 rounded-xl">
           <p className="text-gray-500 mb-2">No contacts for this opportunity yet</p>
           <button
@@ -521,12 +645,13 @@ export default function OpportunityDetailPage() {
       ) : (
         <div className="space-y-3">
           {contacts.map((contact) => {
-            const selection = selections[contact.id] || { emailed: false, called: false, notes: '' };
+            const assignmentId = contact.assignment_id;
+            const selection = selections[assignmentId] || { emailed: false, called: false, notes: '' };
             const hasSelection = selection.emailed || selection.called;
 
             return (
               <div
-                key={contact.id}
+                key={assignmentId}
                 className="border border-gray-700 rounded-xl p-4 sm:p-3 bg-gray-800 shadow-sm"
               >
                 <div className="flex justify-between items-start mb-3">
@@ -552,9 +677,9 @@ export default function OpportunityDetailPage() {
                       className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
                         contact.days_since_contact === null
                           ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                          : contact.days_since_contact >= (contact.cadence_days || 10)
+                          : contact.days_since_contact >= contact.cadence_days
                           ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                          : contact.days_since_contact >= (contact.cadence_days || 10) * 0.7
+                          : contact.days_since_contact >= contact.cadence_days * 0.7
                           ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'
                           : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
                       }`}
@@ -565,14 +690,14 @@ export default function OpportunityDetailPage() {
                         ? 'Today'
                         : `${contact.days_since_contact}d ago`}
                     </span>
-                    <p className="text-xs text-gray-400 mt-1">{contact.cadence_days || 10}d cadence</p>
+                    <p className="text-xs text-gray-400 mt-1">{contact.cadence_days}d cadence</p>
                   </div>
                 </div>
 
                 {/* Toggle Buttons */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   <button
-                    onClick={() => toggleSelection(contact.id, 'emailed')}
+                    onClick={() => toggleSelection(assignmentId, 'emailed')}
                     className={`flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                       selection.emailed
                         ? 'bg-green-600 text-white'
@@ -582,7 +707,7 @@ export default function OpportunityDetailPage() {
                     {selection.emailed && <span>✓</span>} Emailed
                   </button>
                   <button
-                    onClick={() => toggleSelection(contact.id, 'called')}
+                    onClick={() => toggleSelection(assignmentId, 'called')}
                     className={`flex-1 sm:flex-none min-w-[100px] px-4 py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-1.5 ${
                       selection.called
                         ? 'bg-green-600 text-white'
@@ -600,7 +725,13 @@ export default function OpportunityDetailPage() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(contact.id, contact.name)}
+                      onClick={() => handleRemoveFromOpportunity(contact)}
+                      className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 dark:hover:bg-orange-900/20 active:bg-orange-100 transition"
+                    >
+                      Remove
+                    </button>
+                    <button
+                      onClick={() => handleDeleteContact(contact.id, contact.name)}
                       className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs text-red-600 border border-red-200 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 transition"
                     >
                       Delete
@@ -613,21 +744,21 @@ export default function OpportunityDetailPage() {
                   type="text"
                   placeholder="Notes (optional)"
                   value={selection.notes}
-                  onChange={(e) => updateNotes(contact.id, e.target.value)}
+                  onChange={(e) => updateNotes(assignmentId, e.target.value)}
                   className="w-full px-3 py-2.5 sm:py-2 text-sm sm:text-base border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400 mb-3"
                 />
 
                 {/* Submit Button */}
                 <button
-                  onClick={() => handleLogSubmit(contact.id)}
-                  disabled={submittingId === contact.id || !hasSelection}
+                  onClick={() => handleLogSubmit(contact)}
+                  disabled={submittingId === assignmentId || !hasSelection}
                   className={`w-full py-3 sm:py-2.5 text-sm sm:text-base font-medium rounded-lg transition flex items-center justify-center gap-2 ${
                     hasSelection
                       ? 'bg-green-600 text-white hover:bg-green-700 active:bg-green-800'
                       : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   } disabled:opacity-50`}
                 >
-                  {submittingId === contact.id ? (
+                  {submittingId === assignmentId ? (
                     'Saving...'
                   ) : (
                     <>
@@ -646,6 +777,7 @@ export default function OpportunityDetailPage() {
         <ContactHistoryModal
           contactId={historyContactId}
           contactName={historyContactName}
+          opportunityId={opportunityId}
           onClose={closeHistory}
           onDelete={fetchData}
         />

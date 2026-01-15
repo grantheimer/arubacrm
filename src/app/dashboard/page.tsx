@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase, Contact, OutreachLog } from '@/lib/supabase';
+import { supabase, Contact, OutreachLog, ContactOpportunity, Opportunity } from '@/lib/supabase';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -73,9 +73,14 @@ export default function DashboardPage() {
       .from('opportunities')
       .select('*');
 
-    // Get all contacts with their related data
+    // Get all contacts
     const { data: contacts } = await supabase
       .from('contacts')
+      .select('*');
+
+    // Get contact-opportunity assignments
+    const { data: assignments } = await supabase
+      .from('contact_opportunities')
       .select('*');
 
     // Get all outreach logs
@@ -86,6 +91,7 @@ export default function DashboardPage() {
 
     const oppsData = opportunities || [];
     const contactsData = contacts || [];
+    const assignmentsData = assignments || [];
     const logsData = logs || [];
 
     // Build contact map for lookups
@@ -97,32 +103,36 @@ export default function DashboardPage() {
       };
     });
 
-    // Find last outreach for each contact
+    // Find last outreach for each contact-opportunity pair
+    // Key: `${contact_id}-${opportunity_id}`
     const lastOutreach: Record<string, { date: string }> = {};
     logsData.forEach((log: OutreachLog) => {
-      if (!lastOutreach[log.contact_id]) {
-        lastOutreach[log.contact_id] = { date: log.contact_date };
+      const key = `${log.contact_id}-${log.opportunity_id}`;
+      if (!lastOutreach[key]) {
+        lastOutreach[key] = { date: log.contact_date };
       }
     });
 
     // Calculate contacts due today (only from prospect opportunities)
     const prospectOppIds = new Set(
-      oppsData.filter(o => !o.status || o.status === 'prospect').map(o => o.id)
+      oppsData.filter((o: Opportunity) => !o.status || o.status === 'prospect').map((o: Opportunity) => o.id)
     );
 
     let contactsDueToday = 0;
     let contactsOverdue = 0;
 
-    contactsData.forEach((contact: Contact) => {
-      if (!contact.opportunity_id || !prospectOppIds.has(contact.opportunity_id)) return;
+    // Use assignments to calculate due-today (each assignment is a potential to-do item)
+    assignmentsData.forEach((assignment: ContactOpportunity) => {
+      if (!prospectOppIds.has(assignment.opportunity_id)) return;
 
-      const last = lastOutreach[contact.id];
+      const key = `${assignment.contact_id}-${assignment.opportunity_id}`;
+      const last = lastOutreach[key];
       let dueDate: Date;
 
       if (last) {
         const lastContactDate = new Date(last.date);
         lastContactDate.setHours(0, 0, 0, 0);
-        dueDate = addBusinessDays(lastContactDate, contact.cadence_days);
+        dueDate = addBusinessDays(lastContactDate, assignment.cadence_days);
       } else {
         dueDate = today;
       }
